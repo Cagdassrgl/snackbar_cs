@@ -273,7 +273,7 @@ Contributions are welcome! Please feel free to submit a Pull Request. For major 
 
 1. Clone the repository
 ```bash
-git clone https://github.com/yourusername/snackbar_cs.git
+git clone https://github.com/Cagdassrgl/snackbar_cs.git
 ```
 
 2. Install dependencies
@@ -296,34 +296,6 @@ See [CHANGELOG.md](CHANGELOG.md) for a list of changes.
 
 ## Support
 
-If you like this package, please give it a ⭐ on [GitHub](https://github.com/yourusername/snackbar_cs) and consider [buying me a coffee](https://www.buymeacoffee.com/yourusername).
+If you like this package, please give it a ⭐ on [GitHub](https://github.com/Cagdassrgl/snackbar_cs) and consider [buying me a coffee](https://www.buymeacoffee.com/Cagdassrgl).
 
-For issues and feature requests, please visit the [GitHub Issues](https://github.com/yourusername/snackbar_cs/issues) page.
--->
-
-TODO: Put a short description of the package here that helps potential users
-know whether this package might be useful for them.
-
-## Features
-
-TODO: List what your package can do. Maybe include images, gifs, or videos.
-
-## Getting started
-
-TODO: List prerequisites and provide or point to information on how to
-start using the package.
-
-## Usage
-
-TODO: Include short and useful examples for package users. Add longer examples
-to `/example` folder.
-
-```dart
-const like = 'sample';
-```
-
-## Additional information
-
-TODO: Tell users more about the package: where to find more information, how to
-contribute to the package, how to file issues, what response they can expect
-from the package authors, and more.
+For issues and feature requests, please visit the [GitHub Issues](https://github.com/Cagdassrgl/snackbar_cs/issues) page.
