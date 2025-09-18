@@ -3,15 +3,24 @@
 
 A customizable Flutter snackbar package with predefined styles for success, error, warning, and info messages. This package provides an easy-to-use API for displaying beautiful and consistent snackbars throughout your Flutter application.
 
+**🚀 NEW: Multiple Snackbar Support!** Now you can show multiple snackbars simultaneously using different queue behaviors: Replace, Queue, and Stack modes.
+
 ## Features
 
 ✅ **Predefined Types**: Success, Error, Warning, and Info snackbars with appropriate colors and icons
 ✅ **Custom Snackbars**: Create completely custom snackbars with your own colors and icons
+✅ **Multiple Snackbar Modes**: 
+   - **Replace**: New snackbar replaces the current one (default)
+   - **Queue**: Snackbars are shown sequentially, one after another
+   - **Stack**: Multiple snackbars are stacked on top of each other
+✅ **Queue Management**: Built-in queue system for sequential snackbar display
+✅ **Overlay Support**: Advanced stacked snackbars using Flutter's overlay system
 ✅ **Configurable**: Global configuration options for consistent styling
 ✅ **Action Support**: Add action buttons to snackbars
 ✅ **Icon Control**: Show/hide icons for each snackbar
 ✅ **Multiple Behaviors**: Floating or fixed snackbar behavior
 ✅ **Duration Control**: Customize display duration for each snackbar
+✅ **Queue Statistics**: Track queue length and active stacked snackbars
 ✅ **Accessibility**: Built with Flutter's accessibility best practices
 ✅ **Null Safety**: Full null safety support
 ✅ **Low SDK Requirement**: Minimum SDK requirement for broader compatibility
@@ -124,9 +133,60 @@ CSSnackbar.info(
 );
 ```
 
+### Multiple Snackbars (NEW!)
+
+The package now supports three different ways to handle multiple snackbars:
+
+#### Replace Mode (Default)
+```dart
+// Each new snackbar replaces the previous one
+CSSnackbar.success(context, 'First message', queueBehavior: QueueBehavior.replace);
+CSSnackbar.info(context, 'Second message (replaces first)', queueBehavior: QueueBehavior.replace);
+```
+
+#### Queue Mode
+```dart
+// Snackbars are shown sequentially, one after another
+CSSnackbar.success(context, 'Message 1', queueBehavior: QueueBehavior.queue);
+CSSnackbar.info(context, 'Message 2', queueBehavior: QueueBehavior.queue);
+CSSnackbar.warning(context, 'Message 3', queueBehavior: QueueBehavior.queue);
+// They will be displayed one by one in order
+```
+
+#### Stack Mode
+```dart
+// Multiple snackbars are stacked on top of each other
+CSSnackbar.success(context, 'Bottom snackbar', queueBehavior: QueueBehavior.stack);
+CSSnackbar.info(context, 'Middle snackbar', queueBehavior: QueueBehavior.stack);
+CSSnackbar.warning(context, 'Top snackbar', queueBehavior: QueueBehavior.stack);
+// All three will be visible simultaneously, stacked vertically
+```
+
+#### Mixed Behaviors
+```dart
+// You can mix different behaviors as needed
+CSSnackbar.success(context, 'Replace message', queueBehavior: QueueBehavior.replace);
+CSSnackbar.info(context, 'Stack message 1', queueBehavior: QueueBehavior.stack);
+CSSnackbar.warning(context, 'Stack message 2', queueBehavior: QueueBehavior.stack);
+CSSnackbar.error(context, 'Queue message', queueBehavior: QueueBehavior.queue);
+```
+
+#### Queue Management
+```dart
+// Check queue status
+int queueLength = CSSnackbar.queueLength;
+int stackedCount = CSSnackbar.stackedCount;
+
+// Clear all snackbars (queue, stack, and current)
+CSSnackbar.clearAll(context);
+
+// Clear only the queue
+CSSnackbar.clearQueue();
+```
+
 ### Global Configuration
 
-You can set global defaults for all snackbars:
+You can set global defaults for all snackbars, including the default queue behavior:
 
 ```dart
 CSSnackbar.updateDefaultConfig(
@@ -138,6 +198,7 @@ CSSnackbar.updateDefaultConfig(
     borderRadius: 12.0,
     behavior: SnackBarBehavior.floating,
     margin: EdgeInsets.all(16),
+    queueBehavior: QueueBehavior.queue, // Set default queue behavior
   ),
 );
 ```

@@ -4,7 +4,119 @@
 /// for success, error, warning, and info messages.
 library snackbar_cs;
 
+import 'dart:async';
 import 'package:flutter/material.dart';
+
+/// Snackbar queue management for multiple snackbars
+class SnackbarQueue {
+  static final List<_SnackbarItem> _queue = [];
+  static bool _isProcessing = false;
+
+  /// Add snackbar to queue and process if not already processing
+  static void enqueue(_SnackbarItem item) {
+    _queue.add(item);
+    if (!_isProcessing) {
+      _processQueue();
+    }
+  }
+
+  /// Process the queue sequentially
+  static Future<void> _processQueue() async {
+    if (_queue.isEmpty || _isProcessing) return;
+
+    _isProcessing = true;
+
+    while (_queue.isNotEmpty) {
+      final item = _queue.removeAt(0);
+      await _showSnackbarItem(item);
+
+      // Wait for the snackbar duration plus a small delay
+      await Future.delayed(item.duration + const Duration(milliseconds: 500));
+    }
+
+    _isProcessing = false;
+  }
+
+  /// Show individual snackbar item
+  static Future<void> _showSnackbarItem(_SnackbarItem item) async {
+    final completer = Completer<void>();
+
+    ScaffoldMessenger.of(item.context).showSnackBar(
+      SnackBar(
+        content: item.content,
+        backgroundColor: item.backgroundColor,
+        duration: item.duration,
+        showCloseIcon: item.showCloseIcon,
+        elevation: item.elevation,
+        margin: item.margin,
+        padding: item.padding,
+        behavior: item.behavior,
+        dismissDirection: item.dismissDirection,
+        shape: item.shape,
+        action: item.action,
+        onVisible: () {
+          item.onVisible?.call();
+          completer.complete();
+        },
+      ),
+    );
+
+    return completer.future;
+  }
+
+  /// Clear all queued snackbars
+  static void clearQueue() {
+    _queue.clear();
+  }
+
+  /// Get queue length
+  static int get queueLength => _queue.length;
+}
+
+/// Internal class to hold snackbar data
+class _SnackbarItem {
+  final BuildContext context;
+  final Widget content;
+  final Color? backgroundColor;
+  final Duration duration;
+  final bool showCloseIcon;
+  final double elevation;
+  final EdgeInsetsGeometry? margin;
+  final EdgeInsetsGeometry? padding;
+  final SnackBarBehavior behavior;
+  final DismissDirection dismissDirection;
+  final ShapeBorder? shape;
+  final SnackBarAction? action;
+  final VoidCallback? onVisible;
+
+  _SnackbarItem({
+    required this.context,
+    required this.content,
+    this.backgroundColor,
+    required this.duration,
+    required this.showCloseIcon,
+    required this.elevation,
+    this.margin,
+    this.padding,
+    required this.behavior,
+    required this.dismissDirection,
+    this.shape,
+    this.action,
+    this.onVisible,
+  });
+}
+
+/// Queue behavior options
+enum QueueBehavior {
+  /// Replace current snackbar (default behavior)
+  replace,
+
+  /// Add to queue and show sequentially
+  queue,
+
+  /// Stack multiple snackbars using overlay
+  stack,
+}
 
 /// Enum for different snackbar types with predefined colors and icons
 enum SnackbarType {
@@ -44,6 +156,7 @@ class SnackbarConfig {
     this.behavior = SnackBarBehavior.floating,
     this.dismissDirection = DismissDirection.down,
     this.onVisible,
+    this.queueBehavior = QueueBehavior.replace,
   });
 
   /// Duration the snackbar will be displayed
@@ -78,6 +191,9 @@ class SnackbarConfig {
 
   /// Callback when snackbar becomes visible
   final VoidCallback? onVisible;
+
+  /// Queue behavior for multiple snackbars
+  final QueueBehavior queueBehavior;
 }
 
 /// Custom snackbar component with enhanced features
@@ -104,9 +220,16 @@ class CSSnackbar {
     DismissDirection? dismissDirection,
     VoidCallback? onVisible,
     SnackBarAction? action,
+    QueueBehavior? queueBehavior,
   }) {
-    // Hide any current snackbar before showing new one
-    ScaffoldMessenger.of(context).hideCurrentSnackBar();
+    // Determine queue behavior
+    final finalQueueBehavior = queueBehavior ?? defaultConfig.queueBehavior;
+
+    // Handle queue behavior
+    if (finalQueueBehavior == QueueBehavior.replace) {
+      // Hide any current snackbar before showing new one (default behavior)
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+    }
 
     // Determine final configuration values
     final config = defaultConfig;
@@ -151,9 +274,16 @@ class CSSnackbar {
       ],
     );
 
-    // Show the snackbar
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
+    // Create snackbar shape
+    final shape = RoundedRectangleBorder(
+      borderRadius: BorderRadius.circular(finalBorderRadius),
+    );
+
+    // Handle different queue behaviors
+    if (finalQueueBehavior == QueueBehavior.queue) {
+      // Add to queue for sequential display
+      SnackbarQueue.enqueue(_SnackbarItem(
+        context: context,
         content: content,
         backgroundColor: backgroundColor ?? type.color,
         duration: finalDuration,
@@ -163,13 +293,46 @@ class CSSnackbar {
         padding: finalPadding,
         behavior: finalBehavior,
         dismissDirection: finalDismissDirection,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(finalBorderRadius),
-        ),
+        shape: shape,
         action: action,
         onVisible: onVisible,
-      ),
-    );
+      ));
+    } else if (finalQueueBehavior == QueueBehavior.stack) {
+      // Use overlay to stack multiple snackbars
+      _showStackedSnackbar(
+        context,
+        content: content,
+        backgroundColor: backgroundColor ?? type.color,
+        duration: finalDuration,
+        showCloseIcon: finalShowCloseIcon,
+        elevation: finalElevation,
+        margin: finalMargin,
+        padding: finalPadding,
+        behavior: finalBehavior,
+        dismissDirection: finalDismissDirection,
+        shape: shape,
+        action: action,
+        onVisible: onVisible,
+      );
+    } else {
+      // Default replace behavior
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: content,
+          backgroundColor: backgroundColor ?? type.color,
+          duration: finalDuration,
+          showCloseIcon: finalShowCloseIcon,
+          elevation: finalElevation,
+          margin: finalMargin,
+          padding: finalPadding,
+          behavior: finalBehavior,
+          dismissDirection: finalDismissDirection,
+          shape: shape,
+          action: action,
+          onVisible: onVisible,
+        ),
+      );
+    }
   }
 
   /// Show success message with green background and check icon
@@ -181,6 +344,7 @@ class CSSnackbar {
     bool? showIcon,
     VoidCallback? onVisible,
     SnackBarAction? action,
+    QueueBehavior? queueBehavior,
   }) {
     show(
       context,
@@ -191,6 +355,7 @@ class CSSnackbar {
       showIcon: showIcon,
       onVisible: onVisible,
       action: action,
+      queueBehavior: queueBehavior,
     );
   }
 
@@ -203,6 +368,7 @@ class CSSnackbar {
     bool? showIcon,
     VoidCallback? onVisible,
     SnackBarAction? action,
+    QueueBehavior? queueBehavior,
   }) {
     show(
       context,
@@ -213,6 +379,7 @@ class CSSnackbar {
       showIcon: showIcon,
       onVisible: onVisible,
       action: action,
+      queueBehavior: queueBehavior,
     );
   }
 
@@ -225,6 +392,7 @@ class CSSnackbar {
     bool? showIcon,
     VoidCallback? onVisible,
     SnackBarAction? action,
+    QueueBehavior? queueBehavior,
   }) {
     show(
       context,
@@ -235,6 +403,7 @@ class CSSnackbar {
       showIcon: showIcon,
       onVisible: onVisible,
       action: action,
+      queueBehavior: queueBehavior,
     );
   }
 
@@ -247,6 +416,7 @@ class CSSnackbar {
     bool? showIcon,
     VoidCallback? onVisible,
     SnackBarAction? action,
+    QueueBehavior? queueBehavior,
   }) {
     show(
       context,
@@ -257,6 +427,7 @@ class CSSnackbar {
       showIcon: showIcon,
       onVisible: onVisible,
       action: action,
+      queueBehavior: queueBehavior,
     );
   }
 
@@ -278,9 +449,16 @@ class CSSnackbar {
     DismissDirection? dismissDirection,
     VoidCallback? onVisible,
     SnackBarAction? action,
+    QueueBehavior? queueBehavior,
   }) {
-    // Hide any current snackbar before showing new one
-    ScaffoldMessenger.of(context).hideCurrentSnackBar();
+    // Determine queue behavior
+    final finalQueueBehavior = queueBehavior ?? defaultConfig.queueBehavior;
+
+    // Handle queue behavior
+    if (finalQueueBehavior == QueueBehavior.replace) {
+      // Hide any current snackbar before showing new one (default behavior)
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+    }
 
     // Build content with optional custom icon
     Widget content = Row(
@@ -312,25 +490,74 @@ class CSSnackbar {
 
     // Use default config values if not provided
     final config = defaultConfig;
+    final finalDuration = duration ?? config.duration;
+    final finalShowCloseIcon = showCloseIcon ?? config.showCloseIcon;
+    final finalElevation = elevation ?? config.elevation;
+    final finalMargin = margin ?? config.margin;
+    final finalPadding = padding ?? config.padding;
+    final finalBehavior = behavior ?? config.behavior;
+    final finalDismissDirection = dismissDirection ?? config.dismissDirection;
+    final finalBorderRadius = borderRadius ?? config.borderRadius;
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
+    // Create snackbar shape
+    final shape = RoundedRectangleBorder(
+      borderRadius: BorderRadius.circular(finalBorderRadius),
+    );
+
+    // Handle different queue behaviors
+    if (finalQueueBehavior == QueueBehavior.queue) {
+      // Add to queue for sequential display
+      SnackbarQueue.enqueue(_SnackbarItem(
+        context: context,
         content: content,
         backgroundColor: backgroundColor,
-        duration: duration ?? config.duration,
-        showCloseIcon: showCloseIcon ?? config.showCloseIcon,
-        elevation: elevation ?? config.elevation,
-        margin: margin ?? config.margin,
-        padding: padding ?? config.padding,
-        behavior: behavior ?? config.behavior,
-        dismissDirection: dismissDirection ?? config.dismissDirection,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(borderRadius ?? config.borderRadius),
-        ),
+        duration: finalDuration,
+        showCloseIcon: finalShowCloseIcon,
+        elevation: finalElevation,
+        margin: finalMargin,
+        padding: finalPadding,
+        behavior: finalBehavior,
+        dismissDirection: finalDismissDirection,
+        shape: shape,
         action: action,
         onVisible: onVisible,
-      ),
-    );
+      ));
+    } else if (finalQueueBehavior == QueueBehavior.stack) {
+      // Use overlay to stack multiple snackbars
+      _showStackedSnackbar(
+        context,
+        content: content,
+        backgroundColor: backgroundColor,
+        duration: finalDuration,
+        showCloseIcon: finalShowCloseIcon,
+        elevation: finalElevation,
+        margin: finalMargin,
+        padding: finalPadding,
+        behavior: finalBehavior,
+        dismissDirection: finalDismissDirection,
+        shape: shape,
+        action: action,
+        onVisible: onVisible,
+      );
+    } else {
+      // Default replace behavior
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: content,
+          backgroundColor: backgroundColor,
+          duration: finalDuration,
+          showCloseIcon: finalShowCloseIcon,
+          elevation: finalElevation,
+          margin: finalMargin,
+          padding: finalPadding,
+          behavior: finalBehavior,
+          dismissDirection: finalDismissDirection,
+          shape: shape,
+          action: action,
+          onVisible: onVisible,
+        ),
+      );
+    }
   }
 
   /// Update the default configuration for all snackbars
@@ -346,5 +573,249 @@ class CSSnackbar {
   /// Clear all snackbars
   static void clearAll(BuildContext context) {
     ScaffoldMessenger.of(context).clearSnackBars();
+    SnackbarQueue.clearQueue();
+    _StackedSnackbarManager.clearAll();
+  }
+
+  /// Show stacked snackbar using overlay
+  static void _showStackedSnackbar(
+    BuildContext context, {
+    required Widget content,
+    Color? backgroundColor,
+    required Duration duration,
+    required bool showCloseIcon,
+    required double elevation,
+    EdgeInsetsGeometry? margin,
+    EdgeInsetsGeometry? padding,
+    required SnackBarBehavior behavior,
+    required DismissDirection dismissDirection,
+    ShapeBorder? shape,
+    SnackBarAction? action,
+    VoidCallback? onVisible,
+  }) {
+    _StackedSnackbarManager.show(
+      context,
+      content: content,
+      backgroundColor: backgroundColor,
+      duration: duration,
+      showCloseIcon: showCloseIcon,
+      elevation: elevation,
+      margin: margin,
+      padding: padding,
+      behavior: behavior,
+      dismissDirection: dismissDirection,
+      shape: shape,
+      action: action,
+      onVisible: onVisible,
+    );
+  }
+
+  /// Clear queue
+  static void clearQueue() {
+    SnackbarQueue.clearQueue();
+  }
+
+  /// Get queue length
+  static int get queueLength => SnackbarQueue.queueLength;
+
+  /// Get active stacked snackbars count
+  static int get stackedCount => _StackedSnackbarManager.activeCount;
+}
+
+/// Manager for stacked snackbars using overlay
+class _StackedSnackbarManager {
+  static final List<OverlayEntry> _activeEntries = [];
+  static const double _stackOffset = 60.0;
+
+  /// Show a stacked snackbar
+  static void show(
+    BuildContext context, {
+    required Widget content,
+    Color? backgroundColor,
+    required Duration duration,
+    required bool showCloseIcon,
+    required double elevation,
+    EdgeInsetsGeometry? margin,
+    EdgeInsetsGeometry? padding,
+    required SnackBarBehavior behavior,
+    required DismissDirection dismissDirection,
+    ShapeBorder? shape,
+    SnackBarAction? action,
+    VoidCallback? onVisible,
+  }) {
+    final overlay = Overlay.of(context);
+    final stackIndex = _activeEntries.length;
+
+    late OverlayEntry overlayEntry;
+
+    overlayEntry = OverlayEntry(
+      builder: (context) => _StackedSnackbarWidget(
+        content: content,
+        backgroundColor: backgroundColor,
+        showCloseIcon: showCloseIcon,
+        elevation: elevation,
+        margin: margin,
+        padding: padding,
+        shape: shape,
+        action: action,
+        stackIndex: stackIndex,
+        onDismiss: () {
+          overlayEntry.remove();
+          _activeEntries.remove(overlayEntry);
+          _updateStackPositions();
+        },
+      ),
+    );
+
+    _activeEntries.add(overlayEntry);
+    overlay.insert(overlayEntry);
+
+    onVisible?.call();
+
+    // Auto dismiss after duration
+    Timer(duration, () {
+      if (_activeEntries.contains(overlayEntry)) {
+        overlayEntry.remove();
+        _activeEntries.remove(overlayEntry);
+        _updateStackPositions();
+      }
+    });
+  }
+
+  /// Update positions of stacked snackbars
+  static void _updateStackPositions() {
+    // This could be enhanced to animate position changes
+    // For now, the position is calculated in the widget itself
+  }
+
+  /// Clear all stacked snackbars
+  static void clearAll() {
+    for (final entry in _activeEntries) {
+      entry.remove();
+    }
+    _activeEntries.clear();
+  }
+
+  /// Get count of active stacked snackbars
+  static int get activeCount => _activeEntries.length;
+}
+
+/// Widget for individual stacked snackbar
+class _StackedSnackbarWidget extends StatefulWidget {
+  final Widget content;
+  final Color? backgroundColor;
+  final bool showCloseIcon;
+  final double elevation;
+  final EdgeInsetsGeometry? margin;
+  final EdgeInsetsGeometry? padding;
+  final ShapeBorder? shape;
+  final SnackBarAction? action;
+  final int stackIndex;
+  final VoidCallback onDismiss;
+
+  const _StackedSnackbarWidget({
+    required this.content,
+    this.backgroundColor,
+    required this.showCloseIcon,
+    required this.elevation,
+    this.margin,
+    this.padding,
+    this.shape,
+    this.action,
+    required this.stackIndex,
+    required this.onDismiss,
+  });
+
+  @override
+  State<_StackedSnackbarWidget> createState() => _StackedSnackbarWidgetState();
+}
+
+class _StackedSnackbarWidgetState extends State<_StackedSnackbarWidget> with SingleTickerProviderStateMixin {
+  late AnimationController _animationController;
+  late Animation<Offset> _slideAnimation;
+  late Animation<double> _fadeAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _animationController = AnimationController(
+      duration: const Duration(milliseconds: 300),
+      vsync: this,
+    );
+
+    _slideAnimation = Tween<Offset>(
+      begin: const Offset(0, 1),
+      end: Offset.zero,
+    ).animate(CurvedAnimation(
+      parent: _animationController,
+      curve: Curves.easeOutBack,
+    ));
+
+    _fadeAnimation = Tween<double>(
+      begin: 0.0,
+      end: 1.0,
+    ).animate(CurvedAnimation(
+      parent: _animationController,
+      curve: Curves.easeIn,
+    ));
+
+    _animationController.forward();
+  }
+
+  @override
+  void dispose() {
+    _animationController.dispose();
+    super.dispose();
+  }
+
+  void _dismiss() {
+    _animationController.reverse().then((_) {
+      widget.onDismiss();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final bottomOffset = 16.0 + (widget.stackIndex * _StackedSnackbarManager._stackOffset);
+
+    return Positioned(
+      left: 16,
+      right: 16,
+      bottom: bottomOffset,
+      child: SlideTransition(
+        position: _slideAnimation,
+        child: FadeTransition(
+          opacity: _fadeAnimation,
+          child: Material(
+            elevation: widget.elevation,
+            color: widget.backgroundColor ?? Theme.of(context).snackBarTheme.backgroundColor,
+            shape: widget.shape,
+            child: Padding(
+              padding: widget.padding ?? const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              child: Row(
+                children: [
+                  Expanded(child: widget.content),
+                  if (widget.action != null) ...[
+                    const SizedBox(width: 8),
+                    widget.action!,
+                  ],
+                  if (widget.showCloseIcon) ...[
+                    const SizedBox(width: 8),
+                    GestureDetector(
+                      onTap: _dismiss,
+                      child: const Icon(
+                        Icons.close,
+                        size: 18,
+                        color: Colors.white70,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }
