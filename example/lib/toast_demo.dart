@@ -1,3 +1,5 @@
+// ignore_for_file: use_build_context_synchronously
+
 import 'package:flutter/material.dart';
 import 'package:snackbar_cs/toast_cs.dart';
 
@@ -28,6 +30,7 @@ class ToastTestPage extends StatefulWidget {
 class _ToastTestPageState extends State<ToastTestPage> {
   ToastPosition _selectedPosition = ToastPosition.topRight;
   ToastAnimation _selectedAnimation = ToastAnimation.slideAndFade;
+  ToastBehavior _selectedBehavior = ToastBehavior.queue;
   int _messageCounter = 0;
 
   void _showToast(ToastType type, String message) {
@@ -176,6 +179,47 @@ class _ToastTestPageState extends State<ToastTestPage> {
             const Divider(),
             const SizedBox(height: 16),
 
+            const Text('Davranış Seçin:', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 12),
+
+            Wrap(
+              spacing: 8,
+              children: [
+                ChoiceChip(
+                  label: const Text('Queue (Sıralı)'),
+                  selected: _selectedBehavior == ToastBehavior.queue,
+                  onSelected: (selected) {
+                    if (selected) {
+                      setState(() {
+                        _selectedBehavior = ToastBehavior.queue;
+                        CSToast.updateDefaultConfig(
+                          ToastConfig(animation: _selectedAnimation, behavior: _selectedBehavior),
+                        );
+                      });
+                    }
+                  },
+                ),
+                ChoiceChip(
+                  label: const Text('Stack (Üst üste offset ile)'),
+                  selected: _selectedBehavior == ToastBehavior.stack,
+                  onSelected: (selected) {
+                    if (selected) {
+                      setState(() {
+                        _selectedBehavior = ToastBehavior.stack;
+                        CSToast.updateDefaultConfig(
+                          ToastConfig(animation: _selectedAnimation, behavior: _selectedBehavior),
+                        );
+                      });
+                    }
+                  },
+                ),
+              ],
+            ),
+
+            const SizedBox(height: 24),
+            const Divider(),
+            const SizedBox(height: 16),
+
             const Text('Toast Tipleri:', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
             const SizedBox(height: 16),
 
@@ -309,9 +353,19 @@ class _ToastTestPageState extends State<ToastTestPage> {
             Row(
               children: [
                 Expanded(
-                  child: Text(
-                    'Aktif Toast: ${CSToast.activeCount}',
-                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Aktif Toast: ${CSToast.activeCount}',
+                        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                      ),
+                      if (_selectedBehavior == ToastBehavior.queue)
+                        Text(
+                          'Kuyrukta: ${CSToast.queueLength}',
+                          style: const TextStyle(fontSize: 14, color: Colors.grey),
+                        ),
+                    ],
                   ),
                 ),
                 ElevatedButton(

@@ -1,4 +1,4 @@
-// ignore_for_file: inference_failure_on_instance_creation
+// ignore_for_file: inference_failure_on_instance_creation, library_private_types_in_public_api
 
 /// A customizable Flutter snackbar package with predefined styles
 /// for success, error, warning, and info messages.

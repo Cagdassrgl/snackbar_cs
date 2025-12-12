@@ -52,6 +52,15 @@ enum ToastAnimation {
   slideAndFade,
 }
 
+/// Toast queue behavior
+enum ToastBehavior {
+  /// Show immediately, stack with offset if multiple (default)
+  stack,
+
+  /// Queue toasts and show one at a time
+  queue,
+}
+
 /// Toast type with predefined colors and icons
 enum ToastType {
   /// Success type with green color and check icon
@@ -89,6 +98,7 @@ class ToastConfig {
     this.maxWidth = 350.0,
     this.margin = const EdgeInsets.all(16.0),
     this.padding = const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+    this.behavior = ToastBehavior.stack,
   });
 
   /// Duration the toast will be displayed
@@ -123,12 +133,125 @@ class ToastConfig {
 
   /// Padding inside the toast
   final EdgeInsetsGeometry padding;
+
+  /// Behavior when multiple toasts are shown
+  final ToastBehavior behavior;
+}
+
+/// Internal class to hold toast data for queue
+class _ToastItem {
+  final BuildContext context;
+  final String message;
+  final ToastType type;
+  final ToastPosition position;
+  final ToastAnimation animation;
+  final Color backgroundColor;
+  final Color textColor;
+  final TextStyle textStyle;
+  final bool showIcon;
+  final bool showCloseButton;
+  final double elevation;
+  final double borderRadius;
+  final double maxWidth;
+  final EdgeInsetsGeometry margin;
+  final EdgeInsetsGeometry padding;
+  final Duration duration;
+  final VoidCallback? onTap;
+  final VoidCallback? onDismiss;
+  final IconData? customIcon;
+
+  _ToastItem({
+    required this.context,
+    required this.message,
+    required this.type,
+    required this.position,
+    required this.animation,
+    required this.backgroundColor,
+    required this.textColor,
+    required this.textStyle,
+    required this.showIcon,
+    required this.showCloseButton,
+    required this.elevation,
+    required this.borderRadius,
+    required this.maxWidth,
+    required this.margin,
+    required this.padding,
+    required this.duration,
+    this.onTap,
+    this.onDismiss,
+    this.customIcon,
+  });
+}
+
+/// Toast queue manager
+class _ToastQueue {
+  static final List<_ToastItem> _queue = [];
+  static bool _isProcessing = false;
+
+  static void enqueue(_ToastItem item) {
+    _queue.add(item);
+    if (!_isProcessing) {
+      _processQueue();
+    }
+  }
+
+  static Future<void> _processQueue() async {
+    if (_queue.isEmpty || _isProcessing) return;
+
+    _isProcessing = true;
+
+    while (_queue.isNotEmpty) {
+      final item = _queue.removeAt(0);
+      await _showToastItem(item);
+      await Future.delayed(item.duration + const Duration(milliseconds: 200));
+    }
+
+    _isProcessing = false;
+  }
+
+  static Future<void> _showToastItem(_ToastItem item) async {
+    final completer = Completer<void>();
+
+    CSToast._showToastDirect(
+      item.context,
+      message: item.message,
+      type: item.type,
+      position: item.position,
+      animation: item.animation,
+      duration: item.duration,
+      backgroundColor: item.backgroundColor,
+      textColor: item.textColor,
+      textStyle: item.textStyle,
+      showIcon: item.showIcon,
+      showCloseButton: item.showCloseButton,
+      elevation: item.elevation,
+      borderRadius: item.borderRadius,
+      maxWidth: item.maxWidth,
+      margin: item.margin,
+      padding: item.padding,
+      onTap: item.onTap,
+      onDismiss: () {
+        item.onDismiss?.call();
+        completer.complete();
+      },
+      customIcon: item.customIcon,
+    );
+
+    return completer.future;
+  }
+
+  static void clearQueue() {
+    _queue.clear();
+  }
+
+  static int get queueLength => _queue.length;
 }
 
 /// Toast manager for displaying toast messages
 class CSToast {
   static ToastConfig defaultConfig = const ToastConfig();
   static final List<OverlayEntry> _activeToasts = [];
+  static final Map<ToastPosition, int> _toastCountByPosition = {};
 
   /// Show a toast with full customization
   static void show(
@@ -148,6 +271,7 @@ class CSToast {
     double? maxWidth,
     EdgeInsetsGeometry? margin,
     EdgeInsetsGeometry? padding,
+    ToastBehavior? behavior,
     VoidCallback? onTap,
     VoidCallback? onDismiss,
   }) {
@@ -162,6 +286,7 @@ class CSToast {
     final finalMaxWidth = maxWidth ?? config.maxWidth;
     final finalMargin = margin ?? config.margin;
     final finalPadding = padding ?? config.padding;
+    final finalBehavior = behavior ?? config.behavior;
 
     final defaultTextStyle = TextStyle(
       color: textColor ?? Colors.white,
@@ -170,11 +295,10 @@ class CSToast {
     );
     final finalTextStyle = textStyle ?? config.textStyle ?? defaultTextStyle;
 
-    final overlay = Overlay.of(context);
-    late OverlayEntry overlayEntry;
-
-    overlayEntry = OverlayEntry(
-      builder: (context) => _ToastWidget(
+    // Handle queue behavior
+    if (finalBehavior == ToastBehavior.queue) {
+      _ToastQueue.enqueue(_ToastItem(
+        context: context,
         message: message,
         type: type,
         position: finalPosition,
@@ -189,10 +313,91 @@ class CSToast {
         maxWidth: finalMaxWidth,
         margin: finalMargin,
         padding: finalPadding,
+        duration: finalDuration,
+        onTap: onTap,
+        onDismiss: onDismiss,
+      ));
+      return;
+    }
+
+    // Stack behavior with offset
+    _showToastDirect(
+      context,
+      message: message,
+      type: type,
+      position: finalPosition,
+      animation: finalAnimation,
+      duration: finalDuration,
+      backgroundColor: backgroundColor ?? type.color,
+      textColor: textColor ?? Colors.white,
+      textStyle: finalTextStyle,
+      showIcon: finalShowIcon,
+      showCloseButton: finalShowCloseButton,
+      elevation: finalElevation,
+      borderRadius: finalBorderRadius,
+      maxWidth: finalMaxWidth,
+      margin: finalMargin,
+      padding: finalPadding,
+      onTap: onTap,
+      onDismiss: onDismiss,
+    );
+  }
+
+  /// Show toast directly (internal method)
+  static void _showToastDirect(
+    BuildContext context, {
+    required String message,
+    required ToastType type,
+    required ToastPosition position,
+    required ToastAnimation animation,
+    required Duration duration,
+    required Color backgroundColor,
+    required Color textColor,
+    required TextStyle textStyle,
+    required bool showIcon,
+    required bool showCloseButton,
+    required double elevation,
+    required double borderRadius,
+    required double maxWidth,
+    required EdgeInsetsGeometry margin,
+    required EdgeInsetsGeometry padding,
+    VoidCallback? onTap,
+    VoidCallback? onDismiss,
+    IconData? customIcon,
+  }) {
+    final overlay = Overlay.of(context);
+    late OverlayEntry overlayEntry;
+
+    // Calculate stack index for this position
+    final stackIndex = _toastCountByPosition[position] ?? 0;
+    _toastCountByPosition[position] = stackIndex + 1;
+
+    overlayEntry = OverlayEntry(
+      builder: (context) => _ToastWidget(
+        message: message,
+        type: customIcon == null ? type : null,
+        customIcon: customIcon,
+        position: position,
+        animation: animation,
+        backgroundColor: backgroundColor,
+        textColor: textColor,
+        textStyle: textStyle,
+        showIcon: showIcon,
+        showCloseButton: showCloseButton,
+        elevation: elevation,
+        borderRadius: borderRadius,
+        maxWidth: maxWidth,
+        margin: margin,
+        padding: padding,
+        stackIndex: stackIndex,
         onTap: onTap,
         onDismiss: () {
           overlayEntry.remove();
           _activeToasts.remove(overlayEntry);
+          final currentCount = _toastCountByPosition[position] ?? 0;
+          if (currentCount > 0) {
+            _toastCountByPosition[position] = currentCount - 1;
+          }
           onDismiss?.call();
         },
       ),
@@ -202,10 +407,14 @@ class CSToast {
     overlay.insert(overlayEntry);
 
     // Auto dismiss after duration
-    Timer(finalDuration, () {
+    Timer(duration, () {
       if (_activeToasts.contains(overlayEntry)) {
         overlayEntry.remove();
         _activeToasts.remove(overlayEntry);
+        final currentCount = _toastCountByPosition[position] ?? 0;
+        if (currentCount > 0) {
+          _toastCountByPosition[position] = currentCount - 1;
+        }
       }
     });
   }
@@ -300,24 +509,22 @@ class CSToast {
     IconData? icon,
     Duration? duration,
     bool? showCloseButton,
+    ToastBehavior? behavior,
     VoidCallback? onTap,
   }) {
     final config = defaultConfig;
     final finalPosition = position ?? config.position;
-    final finalAnimation = config.animation;
     final finalDuration = duration ?? config.duration;
     final finalShowCloseButton = showCloseButton ?? config.showCloseButton;
+    final finalBehavior = behavior ?? config.behavior;
 
-    final overlay = Overlay.of(context);
-    late OverlayEntry overlayEntry;
-
-    overlayEntry = OverlayEntry(
-      builder: (context) => _ToastWidget(
+    if (finalBehavior == ToastBehavior.queue) {
+      _ToastQueue.enqueue(_ToastItem(
+        context: context,
         message: message,
-        type: null,
-        customIcon: icon,
+        type: ToastType.info, // Dummy type for custom
         position: finalPosition,
-        animation: finalAnimation,
+        animation: config.animation,
         backgroundColor: backgroundColor,
         textColor: textColor,
         textStyle: TextStyle(
@@ -332,31 +539,47 @@ class CSToast {
         maxWidth: config.maxWidth,
         margin: config.margin,
         padding: config.padding,
+        duration: finalDuration,
         onTap: onTap,
-        onDismiss: () {
-          overlayEntry.remove();
-          _activeToasts.remove(overlayEntry);
-        },
+        customIcon: icon,
+      ));
+      return;
+    }
+
+    _showToastDirect(
+      context,
+      message: message,
+      type: ToastType.info,
+      position: finalPosition,
+      animation: config.animation,
+      duration: finalDuration,
+      backgroundColor: backgroundColor,
+      textColor: textColor,
+      textStyle: TextStyle(
+        color: textColor,
+        fontWeight: FontWeight.w500,
+        fontSize: 14,
       ),
+      showIcon: icon != null,
+      showCloseButton: finalShowCloseButton,
+      elevation: config.elevation,
+      borderRadius: config.borderRadius,
+      maxWidth: config.maxWidth,
+      margin: config.margin,
+      padding: config.padding,
+      onTap: onTap,
+      customIcon: icon,
     );
-
-    _activeToasts.add(overlayEntry);
-    overlay.insert(overlayEntry);
-
-    Timer(finalDuration, () {
-      if (_activeToasts.contains(overlayEntry)) {
-        overlayEntry.remove();
-        _activeToasts.remove(overlayEntry);
-      }
-    });
   }
 
-  /// Clear all active toasts
+  /// Clear all active toasts and queue
   static void clearAll() {
     for (final entry in _activeToasts) {
       entry.remove();
     }
     _activeToasts.clear();
+    _toastCountByPosition.clear();
+    _ToastQueue.clearQueue();
   }
 
   /// Update default configuration
@@ -366,6 +589,9 @@ class CSToast {
 
   /// Get count of active toasts
   static int get activeCount => _activeToasts.length;
+
+  /// Get count of queued toasts
+  static int get queueLength => _ToastQueue.queueLength;
 }
 
 /// Widget for displaying toast
@@ -385,6 +611,7 @@ class _ToastWidget extends StatefulWidget {
   final double maxWidth;
   final EdgeInsetsGeometry margin;
   final EdgeInsetsGeometry padding;
+  final int stackIndex;
   final VoidCallback? onTap;
   final VoidCallback onDismiss;
 
@@ -404,6 +631,7 @@ class _ToastWidget extends StatefulWidget {
     required this.maxWidth,
     required this.margin,
     required this.padding,
+    this.stackIndex = 0,
     this.onTap,
     required this.onDismiss,
   });
@@ -496,58 +724,61 @@ class _ToastWidgetState extends State<_ToastWidget> with SingleTickerProviderSta
     final screenWidth = MediaQuery.of(context).size.width;
     final screenHeight = MediaQuery.of(context).size.height;
 
+    // Stack offset: 70px per toast
+    final stackOffset = widget.stackIndex * 70.0;
+
     switch (widget.position) {
       case ToastPosition.topLeft:
         return Positioned(
-          top: topPadding + 16,
+          top: topPadding + 16 + stackOffset,
           left: 16,
           child: child,
         );
       case ToastPosition.topCenter:
         return Positioned(
-          top: topPadding + 16,
+          top: topPadding + 16 + stackOffset,
           left: (screenWidth - widget.maxWidth) / 2,
           child: child,
         );
       case ToastPosition.topRight:
         return Positioned(
-          top: topPadding + 16,
+          top: topPadding + 16 + stackOffset,
           right: 16,
           child: child,
         );
       case ToastPosition.centerLeft:
         return Positioned(
-          top: (screenHeight - 100) / 2,
+          top: (screenHeight - 100) / 2 + stackOffset,
           left: 16,
           child: child,
         );
       case ToastPosition.center:
         return Positioned(
-          top: (screenHeight - 100) / 2,
+          top: (screenHeight - 100) / 2 + stackOffset,
           left: (screenWidth - widget.maxWidth) / 2,
           child: child,
         );
       case ToastPosition.centerRight:
         return Positioned(
-          top: (screenHeight - 100) / 2,
+          top: (screenHeight - 100) / 2 + stackOffset,
           right: 16,
           child: child,
         );
       case ToastPosition.bottomLeft:
         return Positioned(
-          bottom: bottomPadding + 16,
+          bottom: bottomPadding + 16 + stackOffset,
           left: 16,
           child: child,
         );
       case ToastPosition.bottomCenter:
         return Positioned(
-          bottom: bottomPadding + 16,
+          bottom: bottomPadding + 16 + stackOffset,
           left: (screenWidth - widget.maxWidth) / 2,
           child: child,
         );
       case ToastPosition.bottomRight:
         return Positioned(
-          bottom: bottomPadding + 16,
+          bottom: bottomPadding + 16 + stackOffset,
           right: 16,
           child: child,
         );
@@ -592,7 +823,7 @@ class _ToastWidgetState extends State<_ToastWidget> with SingleTickerProviderSta
                   child: Icon(
                     Icons.close,
                     size: 18,
-                    color: widget.textColor.withOpacity(0.7),
+                    color: widget.textColor.withValues(alpha: 0.7),
                   ),
                 ),
               ],
