@@ -1,6 +1,6 @@
 name: snackbar_cs
 description: "A customizable Flutter snackbar package with predefined styles for success, error, warning, and info messages."
-version: 0.0.2
+version: 0.0.3
 homepage: https://github.com/Cagdassrgl/snackbar_cs
 repository: https://github.com/Cagdassrgl/snackbar_cs
 documentation: https://github.com/Cagdassrgl/snackbar_cs#readme
